@@ -10,7 +10,7 @@ It walks an agent through:
 - **Phenotypes and time:** EHR phenotypes as noisy labels, per-site validation, symptom onset vs diagnosis date, referral-center lookback, which date to use
 - **Analysis design:** per-source analysis plus meta-analysis, heterogeneity, replication cohorts
 - **Output privacy:** small-cell and complementary suppression, differencing attacks
-- **AI-generated queries:** enforcing privacy at the data layer, a pytest-style validator for LLM-written SQL, and how to investigate a count that changed after an update
+- **AI-generated queries:** why text-to-SQL is still unreliable on real clinical databases, six failure modes (ambiguity, structure, mapping, unanswerable questions, drift, privacy), layered defences (semantic layer, echo-back, validator, database-enforced privacy, locked queries, golden-set regression tests), reliability metrics, and how to investigate a count that changed after an update
 - **Templates:** a cohort-query skeleton, nested cohorts, and short emails to investigators
 
 The rule it keeps coming back to: whether you *can* merge is decided by governance, whether the merge is *right* is decided by definitions, and whether anyone can *trust* the result is decided by reproducibility.

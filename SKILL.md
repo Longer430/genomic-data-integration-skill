@@ -93,7 +93,27 @@ An EHR phenotype is a label extracted from messy records; treat it like report-d
 
 ## 7. AI-generated queries and reproducibility
 
-**Enforce safety in the database, not in the prompt.** The LLM sees only the schema; queries run under a read-only role on de-identified views that can only return aggregates; suppression happens at the data layer.
+**Why this is a real risk.** Text-to-SQL looks solved on easy benchmarks but not on real databases. On Spider 2.0 (enterprise databases, often more than 1,000 columns), an o1-preview code agent solved 21.3% of tasks, against 91.2% on Spider 1.0 and 73.0% on BIRD (ICLR 2025); later leaderboard peaks were still roughly 40-60% (as of 2025-26, check current numbers before quoting). EHR questions add time expressions and unanswerable questions (EHRSQL), and the EHRSQL 2024 shared task defined reliability as answering correctly what the model can and abstaining otherwise. The dangerous case is a query that runs and returns a plausible number: no error, just a wrong cohort that ends up in a grant. (Same class as wrong slice order in MRI: nothing fails, results quietly get worse.)
+
+**Six failure modes**
+
+| Type | Example | Why it hides |
+|---|---|---|
+| Ambiguity | Does "pathogenic" include LP? Which date is "before onset"? Age at what time counts as "pediatric"? | The model picks one reading and does not say so |
+| Structure | Join duplicates, nesting not enforced, wrong range bounds, NULL handling | The count is only somewhat off and still looks plausible |
+| Mapping | Gene aliases (NRSF -> REST), incomplete ICD lists, wrong column (order vs result date) | Needs domain knowledge to spot |
+| Unanswerable answered anyway | No onset field exists, so the model substitutes a proxy without saying so | Looks like a normal answer |
+| Instability and drift | Same question, different SQL; a prompt, semantic-layer or model update changes results (42 -> 29) | Each run looks fine on its own |
+| Safety and privacy | Raw tables, row-level output, unsuppressed small cells, differencing through repeated small changes | Functionally "correct", still a violation |
+
+**Layered defences.** Do not expect the model to be right every time; shrink the space where it can be wrong and catch errors before results leave.
+
+1. **Semantic layer:** vetted concepts (epilepsy, P/LP variant, symptom onset, brain MRI) with fixed definitions; the LLM composes concepts instead of writing raw SQL.
+2. **Clarify and echo back:** ask when the question is ambiguous; before running, restate the interpretation in plain words ("under 18, P/LP variant, epilepsy on 2+ encounters, brain MRI before the first seizure") and let the investigator confirm.
+3. **Validator before display** (below): static safety checks, logic assertions, a fixture with known answers, and comparison with a reference query where one exists. Abstain when unsure rather than show a possibly wrong number.
+4. **Enforce safety in the database, not in the prompt:** the LLM sees only the schema; queries run under a read-only role on de-identified views that can only return aggregates; suppression happens at the data layer.
+5. **Reproducibility:** log the SQL, component versions and data snapshot for every run. Queries going into a grant or paper are reviewed by an analyst and locked, not regenerated. Deliver an attrition table (patients left after each filter).
+6. **Regression tests before every release:** a golden question set (real investigator questions with reviewed answers) runs before any change to the prompt, semantic layer or model; every change in results must be explained.
 
 **Validator before display (pytest-style):**
 
@@ -132,6 +152,17 @@ Top failure modes it catches: duplicate patients from joins; broken nesting; dat
 5. Usual causes: a definition changed (LP included or not, onset dating), data changed (reclassification, new earlier records), the LLM wrote different SQL, the first count was inflated (relatives, duplicates).
 6. Deliver: definitions confirmed with the investigator, a reviewed and locked query, a dated snapshot, a one-page methods note with counts after each filter (attrition table) so it can be cited and rerun.
 7. Prevent: regression tests on saved queries before every release; version-pin saved queries.
+
+**How to measure reliability**
+- **Accuracy:** execution match with reviewed answers on the golden question set.
+- **Abstention:** refuses what it should (unanswerable, out of scope) and does not refuse what it can answer.
+- **Consistency:** the same question run N times gives the same result; measure this run-to-run noise before judging any change.
+- **Drift:** result differences between releases on the golden set.
+- **User corrections:** errors investigators report, by type.
+
+**Interview framing.** Lessons from the RSNA knee competition carry over directly. In the 1st-place labelling harness, the protocol mattered more than the model (same model, better instructions: confident errors 63 -> 44); the agent had two constrained tools, schema-validated output and a log of every view; protocols were piloted on the gold set before the full run. Mapping: semantic layer and validator matter more than which LLM; read-only role, approved views and query logs; golden question set and release regression tests; measure noise before trusting a change.
+
+> "In my imaging work, the reading protocol mattered more than the model. I'd treat text-to-SQL the same way: constrain what the model can write through a semantic layer, validate every query before results leave, enforce privacy in the database rather than the prompt, and regression-test a golden question set before every release."
 
 ## 8. Cohort query skeleton
 
@@ -175,6 +206,8 @@ Nested cohorts: build cohort 1 as all qualifying index events; build cohort 2 by
 - HGNC and HGNChelper (alias and outdated symbol correction).
 - NIH NOT-OD-25-083 (controlled-access data, countries of concern); 28 CFR Part 202 (DOJ data security program).
 - GA4GH: Data Use Ontology (DUO), Phenopackets; HPO; Mondo; OMOP CDM.
+- Lei F et al. Spider 2.0: Evaluating Language Models on Real-World Enterprise Text-to-SQL Workflows. ICLR 2025 (arXiv:2411.07763).
+- Lee G et al. EHRSQL: A Practical Text-to-SQL Benchmark for Electronic Health Records. NeurIPS 2022 Datasets and Benchmarks; Overview of the EHRSQL 2024 Shared Task on Reliable Text-to-SQL Modeling on EHRs (arXiv:2405.06673).
 
 ---
 
